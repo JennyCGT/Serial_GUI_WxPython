@@ -5,58 +5,57 @@ import sys
 import wx
 import sys
 import glob
-import struct
-import serial
+import os
+import struct   
 from csv import writer
 import numpy as np
+from collections import deque 
 import serial.tools.list_ports
 import numpy as np
 import matplotlib as mtp
 mtp.use('WxAgg')
-from collections import deque 
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg
 from matplotlib.figure import Figure
 import matplotlib.animation as manim
 from datetime import datetime
 
 look= Lock()
+# Global Parametes
+
 stop_threads = False
 stop_threads_1 = False
 flag_data=False
 flag_save= False
-# wr=''
 analog =0
 dato1=0
-SOH = b'H'
-STX = b'T'
-ETX = b'E'
-ser = serial.Serial(
-    port='COM9',\
-    baudrate=9600,\
-    parity=serial.PARITY_NONE,\
-    stopbits=serial.STOPBITS_ONE,\
-    bytesize=serial.EIGHTBITS,\
-        timeout=0.5)
+# ser = serial.Serial()
 
 data_serial = [b'', b'', b'',b'']
 
+# Class for serial Comunication 
 class Serial_com:
-    def __init__(self, ser):
+    def __init__(self, port, baud):
         self.running = 1
+        self.analog =0
+        self.dato1=0
+        self.ser= serial.Serial(port,baud,\
+        parity=serial.PARITY_NONE,\
+        stopbits=serial.STOPBITS_ONE,\
+        bytesize=serial.EIGHTBITS,\
+        timeout=(0.5))
         self.SOH = b'H'
         self.STX = b'T'
         self.ETX = b'E'
-        self.analog =0
-        self.dato1=0
-        self.ser= ser
+
         self.flag_data= False
-        self.data = [b'', b'', b'',b'']
+        # Thread for reading serial Port
         self.t1 = Thread(target = self.loop)
         self.t1.start()
+
+        # Thread for save data received in Port
         self.t2 = Thread(target = self.save_data_sync)
         self.t2.start()
 
-        # self.periodicCall(  )
 
     def loop (self):
         c=['','','','']
@@ -66,34 +65,47 @@ class Serial_com:
             if stop_threads: 
                 break
                 # stop_threads_1= True
-            if ser.inWaiting() > 0:    
+            
+            # Waiting for serial buffer
+            if self.ser.inWaiting() > 0:    
                 # a=ser.read_until(ETX,8)
-                a = ser.readline(1)
-                # tipo= struct.unpack('<s',a.read(2))
-                if a==SOH:
-                    b = ser.readline(5)
+                a = self.ser.readline(1)
+                # Define the start of protocol
+                if a == self.SOH:
+                    # Read the rest of the protocol
+                    b = self.ser.readline(5)
+                    # if its correct the number of bytes separate data received
                     if len(b) ==5:
                         c= struct.unpack('sshs',b)
                 # if c=ser.readline(1)== STX:
                     # c = ser.readline(1)
                 # print(b.e)
                 # print(len(b))
+                # Activate the flag for incomming data
                 flag_data= True
+                # use look for blocking changes from other threads
                 look.acquire()
                 data_serial =c
                 look.release()
+        self.ser.close()    
+
     def endApplication(self):
         self.t1._stop()
     
+    # thread for separate the data in the protocol
     def save_data_sync(self):
         while True:
             global stop_threads_1, data_serial, flag_data
             # global data_serial, flag_data
+            # Kill Thread
             if stop_threads_1:
                 break
             # frame.onConnect.Serial().t1.join()
+
             if flag_data:
+                # Block change in the data from another thread
                 look.acquire()
+                # Determinate which type of data was gotten for saving
                 if(data_serial[0]==b'R'):
                     data.save(data_serial[2],0)
                     # data.axis_data1 = data_serial[2]
@@ -103,17 +115,13 @@ class Serial_com:
                     # data.axis_data1 = data_serial[2]
                     # print (type(data.axis_data1))
                 look.release()
+                # reset flag for incomming data
                 flag_data = False
 
+# Lists serial port names
+# A list of the serial ports available on the system
 
 def serial_ports():
-    """ Lists serial port names
-
-        :raises EnvironmentError:
-            On unsupported or unknown platforms
-        :returns:
-            A list of the serial ports available on the system
-    """
     if sys.platform.startswith('win'):
         ports = ['COM%s' % (i + 1) for i in range(256)]
     elif sys.platform.startswith('linux') or sys.platform.startswith('cygwin'):
@@ -135,6 +143,7 @@ def serial_ports():
     return result
 
 
+# Function for save data in CSV file
 def append_list_as_row(path,file_name, list_of_elem):
     # Open file in append mode
     f=path+"\\"+file_name+'.csv'
@@ -144,9 +153,12 @@ def append_list_as_row(path,file_name, list_of_elem):
         # Add contents of list as last row in the csv file
         csv_writer.writerow(list_of_elem)
 
+
+# Class of GUI
 class Screen(wx.Frame):
     def __init__(self, parent, title):
         super(Screen, self).__init__(parent, title=title)
+        self.Bind(wx.EVT_CLOSE, self.OnClose)
         self.port_selec=''
         self.baud_selec='9600'
         self.choices=[]
@@ -162,22 +174,24 @@ class Screen(wx.Frame):
         b1.SetBackgroundColour('#F1F7EE')
         box_serial = wx.StaticBoxSizer(b1, wx.HORIZONTAL)
         
-        # BOX TEXT AND PORT
+        # BOX TEXT AND PORT OPTIONS
         text_port=wx.StaticText(panel, label="Port")
         text_port.SetBackgroundColour('#F1F7EE')
 
         box_serial.Add(text_port, flag=wx.LEFT|wx.TOP, border=15)
         self.port = wx.ComboBox(panel,value='Choose a port',choices=self.choices)
         self.port.Bind(wx.EVT_COMBOBOX_DROPDOWN, self.List_port)
+        self.port.Bind(wx.EVT_TEXT, self.write_port)
         self.port.Bind(wx.EVT_COMBOBOX, self.selec_port)
         box_serial.Add(self.port,flag=wx.LEFT|wx.TOP, border=15)
-        # BOX TEXT AND BAUDRATE
+
+        # BOX TEXT AND BAUDRATE OPTIONS
         text_baud=wx.StaticText(panel, label="Baudrate")
         text_baud.SetBackgroundColour('#F1F7EE')
         
         box_serial.Add(text_baud,flag=wx.LEFT|wx.TOP, border=15)
         self.baud =wx.ComboBox(panel,value='9600',choices=['2400','4800','9600','19200','38400','57600','74880'
-        ,'115200','230400'])
+        ,'115200','230400', '460800'])
         self.baud.Bind(wx.EVT_COMBOBOX, self.selec_baud)
         box_serial.Add(self.baud,flag=wx.LEFT|wx.TOP, border=15)
         self.connect_button = wx.Button(panel, label='Connect')
@@ -192,20 +206,22 @@ class Screen(wx.Frame):
         self.box_rec = wx.StaticBoxSizer(b2, wx.HORIZONTAL)
         
         # BUTTON BROWSER
-        self.path = wx.TextCtrl(panel,value='C:\\')
-        self.box_rec.Add(self.path, flag=wx.TOP|wx.EXPAND,border=15)
 
         self.text_port=wx.StaticText(panel, label="Path")
         self.text_port.SetBackgroundColour('#F1F7EE')
         self.box_rec.Add(self.text_port, flag=wx.LEFT|wx.TOP, border=15)
-        self.browser_button= wx.Button(panel,label="Browser")
-        self.browser_button.Bind(wx.EVT_BUTTON, self.onDir)
-        self.box_rec.Add(self.browser_button, flag=wx.LEFT|wx.TOP, border=15)
+
+        self.path = wx.TextCtrl(panel,value=os.path.abspath(os.getcwd())+'\csv',size=wx.Size(200,15))
+        self.box_rec.Add(self.path, flag=wx.LEFT|wx.TOP|wx.EXPAND,border=15)
+
+        # self.browser_button= wx.Button(panel,label="Browser")
+        # self.browser_button.Bind(wx.EVT_BUTTON, self.onDir)
+        # self.box_rec.Add(self.browser_button, flag=wx.LEFT|wx.TOP, border=15)
         # BUTTON  REC
         self.rec_button= wx.Button(panel,label="REC")
         self.rec_button.Bind(wx.EVT_BUTTON, self.onRec)
         self.box_rec.Add(self.rec_button, flag=wx.LEFT|wx.TOP, border=15)
-        sizer.Add(self.box_rec, pos=(0, 4), span=(1, 3),flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT , border=10)
+        sizer.Add(self.box_rec, pos=(0, 4), span=(1, 4),flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT , border=10)
 
         line = wx.StaticLine(panel)
 
@@ -224,11 +240,13 @@ class Screen(wx.Frame):
         # self.a.legend()
         # self.a.set_ylim(0,1500)
         # self.box_plot.Add(FigureCanvasWxAgg(self,wx.ID_ANY,self.fig), flag=wx.LEFT|wx.TOP, border=15)
+
+        # Function for realtime plot
         self.canvas = FigureCanvasWxAgg(panel, wx.ID_ANY, self.fig)
         self.animator = manim.FuncAnimation(self.fig,self.anim, interval=500)
         # self.data_plot = RealtimePlot(axes,self.canvas,fig) 
 
-        self.box_plot.Add(self.canvas, flag=wx.LEFT|wx.TOP|wx.RIGHT|wx.BOTTOM, border=5)
+        self.box_plot.Add(self.canvas, flag=wx.LEFT|wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND, border=5)
         # sizer.Add(self.canvas,pos=(1, 1), span=(10, 4),flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT , border=10)
 
         sizer.Add(self.box_plot, pos=(1, 0), span=(3, 5),flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT , border=10)
@@ -245,7 +263,7 @@ class Screen(wx.Frame):
         text_data1.SetFont(wx.Font(18, wx.DECORATIVE, wx.NORMAL, wx.NORMAL))
         self.box_data.Add(text_data1, flag=wx.LEFT|wx.TOP, border=15)
 
-        self.value_data1=wx.StaticText(panel, label="0.00")
+        self.value_data1=wx.StaticText(panel, label="00")
         self.value_data1.SetBackgroundColour('#F1F7EE')
         self.value_data1.SetFont(wx.Font(40, wx.DECORATIVE, wx.NORMAL, wx.NORMAL))
         self.box_data.Add(self.value_data1, flag=wx.LEFT|wx.TOP|wx.ALIGN_CENTER , border=15)
@@ -256,7 +274,7 @@ class Screen(wx.Frame):
         text_data1.SetFont(wx.Font(18, wx.DECORATIVE, wx.NORMAL, wx.NORMAL))
         self.box_data.Add(text_data1, flag=wx.LEFT|wx.TOP, border=15)
 
-        self.value_data2=wx.StaticText(panel, label="0.00")
+        self.value_data2=wx.StaticText(panel, label="00")
         self.value_data2.SetBackgroundColour('#F1F7EE')
         self.value_data2.SetFont(wx.Font(40, wx.DECORATIVE, wx.NORMAL, wx.NORMAL))
         self.box_data.Add(self.value_data2, flag=wx.LEFT|wx.TOP|wx.ALIGN_CENTER, border=15)
@@ -279,12 +297,8 @@ class Screen(wx.Frame):
         # self.Limit_min.Bind(wx.EVT_TEXT,self.Set_Limit)
 
         self.box_princ= wx.StaticBoxSizer(b5,wx.VERTICAL)
-        bb1 = wx.StaticBox(panel)
-        bb1.SetBackgroundColour('#F1F7EE')
-        self.box_param = wx.StaticBoxSizer(bb1,wx.HORIZONTAL)        
-        bb2 = wx.StaticBox(panel)
-        bb2.SetBackgroundColour('#F1F7EE')
-        self.box_min = wx.StaticBoxSizer( bb2,wx.HORIZONTAL)
+        self.box_param = wx.BoxSizer(wx.HORIZONTAL)        
+        self.box_min = wx.BoxSizer( wx.HORIZONTAL)
 
         self.box_param.Add(text_max,  0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 5)
         self.box_param.Add(self.Limit_max, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 5)
@@ -292,22 +306,45 @@ class Screen(wx.Frame):
         self.box_min.Add(text_min,  0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 5)
         self.box_min.Add(self.Limit_min, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 5)
 
-        self.box_princ.Add(self.box_param,flag=wx.LEFT|wx.TOP|wx.ALIGN_CENTER, border=1)
-        self.box_princ.Add(self.box_min,flag=wx.LEFT|wx.TOP|wx.ALIGN_CENTER, border=1)
+        self.box_princ.Add(self.box_param,flag=wx.LEFT|wx.TOP|wx.ALIGN_CENTER, border=5)
+        self.box_princ.Add(self.box_min,flag=wx.LEFT|wx.TOP|wx.ALIGN_CENTER, border=5)
         self.set_button= wx.Button(panel,label="SET")
         self.set_button.Bind(wx.EVT_BUTTON, self.Set_Limit)
-        self.box_princ.Add(self.set_button,flag=wx.LEFT|wx.TOP|wx.ALIGN_CENTER, border=1)
+        self.box_princ.Add(self.set_button,flag=wx.LEFT|wx.TOP|wx.ALIGN_CENTER, border=5)
 
         sizer.Add(self.box_princ, pos=(3,5), span=(1, 3),flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT|wx.BOTTOM , border=10)
 
 # -------------------- MESSAGE SETTINGS -----------------------------------------------------
-        b6 = wx.StaticBox(panel,label="Graph Settings")
+        b6 = wx.StaticBox(panel,label="Messages")
         b6.SetBackgroundColour('#F1F7EE')
+        self.box_msg = wx.StaticBoxSizer(b6, wx.HORIZONTAL)
 
-        text_max=wx.StaticText(panel, label="Y-Limit Max")
-        text_max.SetBackgroundColour('#F1F7EE')
-        text_max.SetFont(wx.Font(10, wx.DECORATIVE, wx.NORMAL, wx.NORMAL))
-        self.Limit_max = wx.TextCtrl(panel,value='100', size=wx.Size(40,20))
+        text_1 = wx.StaticText(panel, label="Serial Comunication: ")
+        text_1.SetBackgroundColour('#F1F7EE')
+        text_1.SetFont(wx.Font(12, wx.DECORATIVE, wx.NORMAL, wx.NORMAL))
+        self.box_msg.Add(text_1,flag=wx.LEFT|wx.TOP|wx.ALIGN_CENTER, border=1)
+
+
+        self.ser_msg=wx.StaticText(panel, label="Close", size=wx.Size(150,18))
+        self.ser_msg.SetBackgroundColour('#F1F7EE')
+        self.ser_msg.SetForegroundColour('#364958')
+        self.ser_msg.SetFont(wx.Font(12, wx.DECORATIVE, wx.NORMAL, wx.NORMAL))
+        self.box_msg.Add(self.ser_msg,flag=wx.LEFT|wx.TOP|wx.ALIGN_CENTER, border=1)
+        
+        text_2 = wx.StaticText(panel, label="Recording Data: ")
+        text_2.SetBackgroundColour('#F1F7EE')
+        text_2.SetFont(wx.Font(12, wx.DECORATIVE, wx.NORMAL, wx.NORMAL))
+        self.box_msg.Add(text_2,flag=wx.LEFT|wx.TOP|wx.ALIGN_CENTER, border=1)
+
+
+        self.text_msg=wx.StaticText(panel, label=" Stop", size=wx.Size(150,18))
+        self.text_msg.SetBackgroundColour('#F1F7EE')
+        self.text_msg.SetForegroundColour('#3B6064')
+        self.text_msg.SetFont(wx.Font(12, wx.DECORATIVE, wx.NORMAL, wx.NORMAL))
+        self.box_msg.Add(self.text_msg,flag=wx.LEFT|wx.TOP|wx.ALIGN_CENTER, border=1)
+        
+
+        sizer.Add(self.box_msg, pos=(4,0), span=(1, 8),flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT|wx.BOTTOM , border=10)
 
 
         sizer.AddGrowableCol(2)
@@ -317,7 +354,9 @@ class Screen(wx.Frame):
         self.Center()
         self.Show(True)    
 #------------------------------------------------------------------------------------------------
+    
     def onRec(self,event):
+        # ------------ Function for export data
         # print('rec')
         # print(self.rec_button.Label)
         if self.rec_button.Label=='REC':
@@ -325,21 +364,27 @@ class Screen(wx.Frame):
             self.path_dir= str(self.path.GetValue())
             print(self.path_dir)
             self.data_rec = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-            f=self.path_dir+"\\"+self.data_rec+'.csv'
+            self.text_msg.SetLabel('Exporting file ...'+ self.data_rec+'.csv')
+            # f=self.path_dir+"\\"+self.data_rec+'.csv'
+            f='csv/'+self.data_rec+'.csv'
+
+            # Create CSV file
             with open(f, 'w') as write_obj:
             # Create a writer object from csv module
                 csv_writer = writer(write_obj)
-            # Add contents of list as last row in the csv file
+            # Add header to the csv file
                 csv_writer.writerow(['Date Time','Baudrate','Data analog1','Data analog2'])
             global flag_save
             flag_save = True
             self.rec_button.SetLabel('STOP')
         else:
+            self.text_msg.SetLabel('Stop')
             self.rec_button.SetLabel('REC')        
             flag_save = False
 
+    # List COM availables 
     def List_port(self,event):
-        print(serial_ports)
+        # print(serial_ports)
         ports = list(serial.tools.list_ports.comports())
         lst = []
         for p in ports:
@@ -349,14 +394,20 @@ class Screen(wx.Frame):
         self.port.SetItems(self.choices)
         print(ports)
     
+    # Get de Baudrate selected
     def selec_baud(self,event):
         self.baud_selec=self.baud.GetStringSelection()
         print(self.baud_selec)
 
+    # Get Port Selected or writer
     def selec_port(self,event):
         self.port_selec =self.port.GetStringSelection()
         print(self.port.GetStringSelection())
 
+    def write_port(self,event):
+        self.port_selec = self.port.GetValue()
+
+    # Open System Directory to choose a folder
     def onDir(self, event):
         """
         Show the DirDialog and print the user's choice 
@@ -372,38 +423,39 @@ class Screen(wx.Frame):
             self.path_dir = dlg.GetPath()
         dlg.Destroy()
     
+    # Start thread of Serial Communication
     def onConnect(self, event):
         global stop_threads
         global stop_threads_1 
-        global ser
+        # global ser
         print('port: '+ self.port_selec +'Baud: '+self.baud_selec)
         if self.connect_button.Label=='Connect':
-            if(self.port_selec == '' or self.port_selec=='Choose a port'):
+            if(self.port_selec == '' or self.port_selec == 'Choose a port'):
                 wx.MessageBox(message=" Choose a Port", caption= "Warning")
             else:
                 self.connect_button.SetLabel('Disconnect')
                 stop_threads = False
                 stop_threads_1 = False
                 print('Start')
-                ser.port=self.port_selec
-                ser.baudrate = int(self.baud_selec)
-                self.Serial=Serial_com(ser)
-                wx.MessageBox(message=" Connection Started", caption= "Connect")
-                
+                self.Serial=Serial_com(self.port_selec,self.baud_selec)
+                # wx.MessageBox(message=" Connection Started", caption= "Connect")
+                self.ser_msg.SetLabel("Open")
         else:
             self.connect_button.SetLabel('Connect')
             stop_threads = True
             stop_threads_1 = True
-            wx.MessageBox(message=" Connection Ended", caption= "Disconnect")
-            
+            # wx.MessageBox(message=" Connection Ended", caption= "Disconnect")
+            self.ser_msg.SetLabel("Close")            
             # self.Serial.endApplication()
     
+    # Reset Plot Limits  
     def Set_Limit(self,event):
         self.y_max= int(self.Limit_max.GetValue())
         self.y_min= int(self.Limit_min.GetValue())
         print(self.y_max)
         print(self.y_min)
 
+    # Plotting Real time
     def anim(self,i):
             if i%10 == 0:
                 self.values = []
@@ -423,9 +475,19 @@ class Screen(wx.Frame):
             self.a.minorticks_on()
             self.a.grid(which='major', linestyle='-', linewidth='0.5', color='black') 
             self.a.grid(which='minor', linestyle=':', linewidth='0.5', color='black') 
+    
+    # Stop all threads 
+    def OnClose(self, event):
+        global stop_threads, stop_threads_1
+        self.animator.event_source.stop()
+        stop_threads =True
+        stop_threads_1 = True
+        self.Destroy() 
+
             
+# Class for save data received and create arrays for plotting
 class DataPlot:
-    def __init__(self, max_entries = 120):
+    def __init__(self, max_entries = 60):
         self.axis_t = deque([0],maxlen=max_entries)
         self.axis_data1 = deque([0],maxlen=max_entries)
         self.axis_data2 = deque([0],maxlen=max_entries)
@@ -434,6 +496,8 @@ class DataPlot:
         self.data_save=[]
         self.max_entries = max_entries
         self.count=0
+
+    # function for save data for plotting, save data in CSV  and update current value
     def save_all(self,data1,data2):
         tim=datetime.now().strftime('%Y %m %d %H:%M:%S')
         ######## DATA1 ##########################
@@ -450,10 +514,12 @@ class DataPlot:
         if(flag_save):
             # print('guardar')
             self.data_save=[tim ,str(frame.baud_selec),str(data1),str(data2)]
-            # append_list_as_row(frame.path_dir,frame.data_rec, data.data_save)
+            # frame.text_msg.SetLabel('Data 1:    '+str(data1) +'      Data2:     '+str(data2))
+            append_list_as_row(frame.path_dir,frame.data_rec, data.data_save)
        
         # frame.plot_data(data.axis_data1,data.axis_t)
          
+    # Wait for get two data form serial before save
     def save (self,a,i):
         self.count=self.count+1
         self.data[i]=a        
@@ -466,9 +532,12 @@ class DataPlot:
 
  
 if __name__ == '__main__':
+    # object for save data
     data = DataPlot()
+    # GUI panel
     app = wx.App(False)
     frame = Screen(None, 'Datalogger')
+    # Main loop for GUI
     app.MainLoop()
 
     
