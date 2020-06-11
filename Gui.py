@@ -1,4 +1,4 @@
-from threading import Thread, Lock
+from threading import Thread, Lock, Event
 import time
 import serial
 import sys
@@ -28,6 +28,8 @@ flag_data=False
 flag_save= False
 analog =0
 dato1=0
+event = Event()
+
 # ser = serial.Serial()
 
 data_serial = [b'', b'', b'',b'']
@@ -46,14 +48,11 @@ class Serial_com:
         self.SOH = b'H'
         self.STX = b'T'
         self.ETX = b'E'
-
         self.flag_data= False
         # Thread for reading serial Port
         self.t1 = Thread(target = self.loop)
         self.t1.start()
-
-        # Thread for save data received in Port
-        self.t2 = Thread(target = self.save_data_sync)
+        self.t2 = Thread(target = self.update)
         self.t2.start()
 
 
@@ -61,7 +60,7 @@ class Serial_com:
         c=['','','','']
         global data_serial
         while True:
-            global stop_threads, data_serial,flag_data 
+            global stop_threads, data_serial, flag_data, event
             if stop_threads: 
                 break
                 # stop_threads_1= True
@@ -77,46 +76,38 @@ class Serial_com:
                     # if its correct the number of bytes separate data received
                     if len(b) ==5:
                         c= struct.unpack('sshs',b)
-                # if c=ser.readline(1)== STX:
-                    # c = ser.readline(1)
-                # print(b.e)
-                # print(len(b))
-                # Activate the flag for incomming data
-                flag_data= True
+
                 # use look for blocking changes from other threads
                 look.acquire()
                 data_serial =c
-                look.release()
-        self.ser.close()    
-
-    def endApplication(self):
-        self.t1._stop()
-    
-    # thread for separate the data in the protocol
-    def save_data_sync(self):
-        while True:
-            global stop_threads_1, data_serial, flag_data
-            # global data_serial, flag_data
-            # Kill Thread
-            if stop_threads_1:
-                break
-            # frame.onConnect.Serial().t1.join()
-
-            if flag_data:
-                # Block change in the data from another thread
-                look.acquire()
-                # Determinate which type of data was gotten for saving
                 if(data_serial[0]==b'R'):
                     data.save(data_serial[2],0)
                     # data.axis_data1 = data_serial[2]
                     # print (data.axis_data1)
                 if(data_serial[0]==b'B'):
-                    data.save(data_serial[2],1)
-                    # data.axis_data1 = data_serial[2]
-                    # print (type(data.axis_data1))
+                    data.save(data_serial[2],1)                
                 look.release()
-                # reset flag for incomming data
-                flag_data = False
+                # flag_data = True
+                # event.set()
+        self.ser.close()    
+    
+    def update (self):
+        i = 0
+        while True:
+            global flag_data, event
+            if stop_threads_1:
+                break
+            if event.is_set():
+                # i=i+1
+                # if i > 1:
+                    # look.acquire()
+                    print(data.tim)
+                    print("%d   %d",data.axis_data1[-1], data.axis_data2[-1])
+                    data.act(data.tim, data.axis_data1[-1], data.axis_data2[-1])
+                    event.clear()
+                    i = 0
+                    # look.release()
+                    # flag_data= False
 
 # Lists serial port names
 # A list of the serial ports available on the system
@@ -154,20 +145,23 @@ def append_list_as_row(path,file_name, list_of_elem):
         csv_writer.writerow(list_of_elem)
 
 
+
 # Class of GUI
 class Screen(wx.Frame):
     def __init__(self, parent, title):
         super(Screen, self).__init__(parent, title=title)
         self.Bind(wx.EVT_CLOSE, self.OnClose)
         self.port_selec=''
-        self.baud_selec='9600'
+        self.baud_selec='115200'
         self.choices=[]
         self.y_max = 100
         self.y_min = 0
         self.path_dir = 'C:'
         self.data_rec=''
         panel = wx.Panel(self, size=(1000,600))
-        panel.SetBackgroundColour('#364958')
+        # panel.SetBackgroundColour('#364958')
+        # panel.SetBackgroundColour('#5B5F97')
+        panel.SetBackgroundColour('#C0C0C0')
         sizer = wx.GridBagSizer(5, 10)
 # --------------------------------BOX SERIAL SETTINGS-----------------------------------------------------------
         b1 = wx.StaticBox(panel, label="Serial Settings")
@@ -190,7 +184,7 @@ class Screen(wx.Frame):
         text_baud.SetBackgroundColour('#F1F7EE')
         
         box_serial.Add(text_baud,flag=wx.LEFT|wx.TOP, border=15)
-        self.baud =wx.ComboBox(panel,value='9600',choices=['2400','4800','9600','19200','38400','57600','74880'
+        self.baud =wx.ComboBox(panel,value='115200',choices=['2400','4800','9600','19200','38400','57600','74880'
         ,'115200','230400', '460800'])
         self.baud.Bind(wx.EVT_COMBOBOX, self.selec_baud)
         box_serial.Add(self.baud,flag=wx.LEFT|wx.TOP, border=15)
@@ -199,7 +193,34 @@ class Screen(wx.Frame):
         
         box_serial.Add(self.connect_button,flag=wx.LEFT|wx.TOP, border=15)
         sizer.Add(box_serial, pos=(0, 0), span=(1, 4),flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT , border=10)
+# --------------------------------------------------------------------------------------------
+        b3 = wx.StaticBox(panel, label="Real Time Graph")
+        b3.SetBackgroundColour('#87BBA2')
 
+        self.box_plot = wx.StaticBoxSizer(b3, wx.VERTICAL)
+        self.fig = Figure(figsize=([5.3,4]),tight_layout = {'pad': 2})
+        self.a = self.fig.add_subplot(111)
+        # self.lineplot, = self.a.plot([],'ro-', label="Data1",markersize=1, linewidth=1)
+
+        self.lineplot, = self.a.plot([],[],"bo-",label="Data1",markersize=0.5)
+        self.lineplot1, = self.a.plot([],[],"ro-",label="Data1",markersize=0.5)
+
+        self.a.legend(loc=1) 
+        self.a.minorticks_on()
+        self.a.grid(which='major', linestyle='-', linewidth='0.5', color='black') 
+        self.a.grid(which='minor', linestyle=':', linewidth='0.5', color='black') 
+
+
+        # Function for realtime plot
+        self.canvas = FigureCanvasWxAgg(panel, wx.ID_ANY, self.fig)
+        # self.data_plot = RealtimePlot(axes,self.canvas,fig) 
+
+        self.box_plot.Add(self.canvas, flag=wx.LEFT|wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND, border=5)
+        # sizer.Add(self.canvas,pos=(1, 1), span=(10, 4),flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT , border=10)
+
+        sizer.Add(self.box_plot, pos=(1, 0), span=(3, 5),flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT , border=10)
+
+        self._plot = RealtimePlot(self.a, self.canvas, self.fig)
 # ----------------------BOX RECORD SETTINGS---------------------------------------------------
         b2 = wx.StaticBox(panel, label="Record / Export")
         b2.SetBackgroundColour('#F1F7EE')
@@ -225,36 +246,12 @@ class Screen(wx.Frame):
 
         line = wx.StaticLine(panel)
 
-# -------------------- PLOT SETTINGS -----------------------------------------------------
-
-        b3 = wx.StaticBox(panel, label="Real Time Graph")
-        b3.SetBackgroundColour('#87BBA2')
-        # sizer.Add(self.box_plot, pos=(1, 0), span=(10, 4),flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT , border=10)
-
-        self.box_plot = wx.StaticBoxSizer(b3, wx.VERTICAL)
-        self.fig = Figure(figsize=([5.3,4]),tight_layout = {'pad': 2})
-        self.a = self.fig.add_subplot(111)
-        # self.a.plot([],[],"bo-",label="Data1",markersize=0.5)
-        # self.a.plot([],[],"ro-",label="Data1",markersize=0.5)
-        # self.a.grid()
-        # self.a.legend()
-        # self.a.set_ylim(0,1500)
-        # self.box_plot.Add(FigureCanvasWxAgg(self,wx.ID_ANY,self.fig), flag=wx.LEFT|wx.TOP, border=15)
-
-        # Function for realtime plot
-        self.canvas = FigureCanvasWxAgg(panel, wx.ID_ANY, self.fig)
-        self.animator = manim.FuncAnimation(self.fig,self.anim, interval=500)
-        # self.data_plot = RealtimePlot(axes,self.canvas,fig) 
-
-        self.box_plot.Add(self.canvas, flag=wx.LEFT|wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND, border=5)
-        # sizer.Add(self.canvas,pos=(1, 1), span=(10, 4),flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT , border=10)
-
-        sizer.Add(self.box_plot, pos=(1, 0), span=(3, 5),flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT , border=10)
 
 # -------------------- CURRENT SETTINGS -----------------------------------------------------
 
         b4 = wx.StaticBox(panel,label="Current Value")
         b4.SetBackgroundColour('#87BBA2')
+        # b4.SetBackgroundColour('#143642')
         self.box_data = wx.StaticBoxSizer(b4, wx.VERTICAL)
         
         text_data1=wx.StaticText(panel, label="Analogue Data 1")
@@ -287,13 +284,15 @@ class Screen(wx.Frame):
         text_max=wx.StaticText(panel, label="Y-Limit Max")
         text_max.SetBackgroundColour('#F1F7EE')
         text_max.SetFont(wx.Font(10, wx.DECORATIVE, wx.NORMAL, wx.NORMAL))
-        self.Limit_max = wx.TextCtrl(panel,value='100', size=wx.Size(40,20))
+        self.Limit_max = wx.SpinCtrl(panel, value="100" , min=0, max=100, initial=100)        
+        # self.Limit_max = wx.TextCtrl(panel,value='100', size=wx.Size(40,20))
         # self.Limit_max.Bind(wx.EVT_TEXT, self.Set_Limit)
         
         text_min=wx.StaticText(panel, label="Y-Limit Max")
         text_min.SetBackgroundColour('#F1F7EE')
         text_min.SetFont(wx.Font(10, wx.DECORATIVE, wx.NORMAL, wx.NORMAL))
-        self.Limit_min = wx.TextCtrl(panel,value='0', size=wx.Size(40,20))
+        self.Limit_min = wx.SpinCtrl(panel, value="0" , min=0, max=100, initial=0)        
+        # self.Limit_min = wx.TextCtrl(panel,value='0', size=wx.Size(40,20))
         # self.Limit_min.Bind(wx.EVT_TEXT,self.Set_Limit)
 
         self.box_princ= wx.StaticBoxSizer(b5,wx.VERTICAL)
@@ -440,6 +439,8 @@ class Screen(wx.Frame):
                 self.Serial=Serial_com(self.port_selec,self.baud_selec)
                 # wx.MessageBox(message=" Connection Started", caption= "Connect")
                 self.ser_msg.SetLabel("Open")
+                self.port.Disable()
+                self.baud.Disable()
         else:
             self.connect_button.SetLabel('Connect')
             stop_threads = True
@@ -447,42 +448,26 @@ class Screen(wx.Frame):
             # wx.MessageBox(message=" Connection Ended", caption= "Disconnect")
             self.ser_msg.SetLabel("Close")            
             # self.Serial.endApplication()
+            self.port.Enable()
+            self.baud.Disable()
     
     # Reset Plot Limits  
     def Set_Limit(self,event):
         self.y_max= int(self.Limit_max.GetValue())
         self.y_min= int(self.Limit_min.GetValue())
+        self._plot.y_max = self.y_max
+        self._plot.y_min = self.y_min
         print(self.y_max)
         print(self.y_min)
 
-    # Plotting Real time
-    def anim(self,i):
-            if i%10 == 0:
-                self.values = []
-            else:
-                self.values = data.axis_data1
-            self.a.clear()
-            self.a.set_xticklabels(data.axis_t, fontsize=8)
-            self.a.set_ylim([self.y_min, self.y_max])
-            # print(np.arange(self.y_min,self.y_max+5,5))
-            y=np.arange(self.y_min,self.y_max+5,10)
-            self.a.set_yticks(y) 
-            # self.a.set_yticklabels(y, fontsize=8)
-            # self.a.relim()
-            self.a.plot(list(range(len(data.axis_data1))),data.axis_data1,'ro-', label="Data1",markersize=1, linewidth=1)
-            self.a.plot(list(range(len(data.axis_data2))),data.axis_data2,'bo-', label="Data2",markersize=1,linewidth=1)
-            self.a.legend(loc=1) 
-            self.a.minorticks_on()
-            self.a.grid(which='major', linestyle='-', linewidth='0.5', color='black') 
-            self.a.grid(which='minor', linestyle=':', linewidth='0.5', color='black') 
-    
     # Stop all threads 
     def OnClose(self, event):
         global stop_threads, stop_threads_1
-        self.animator.event_source.stop()
+        # self.animator.event_source.stop()
         stop_threads =True
         stop_threads_1 = True
         self.Destroy() 
+
 
             
 # Class for save data received and create arrays for plotting
@@ -491,7 +476,7 @@ class DataPlot:
         self.axis_t = deque([0],maxlen=max_entries)
         self.axis_data1 = deque([0],maxlen=max_entries)
         self.axis_data2 = deque([0],maxlen=max_entries)
-        # self.data_mqtt=[0]
+        self.tim = 0
         self.data = [0, 0]
         self.data_save=[]
         self.max_entries = max_entries
@@ -499,7 +484,7 @@ class DataPlot:
 
     # function for save data for plotting, save data in CSV  and update current value
     def save_all(self,data1,data2):
-        tim=datetime.now().strftime('%Y %m %d %H:%M:%S')
+        self.tim=datetime.now().strftime('%Y %m %d %H:%M:%S')
         ######## DATA1 ##########################
         self.axis_t.append(datetime.now().strftime('%H:%M:%S'))
         # print(self.axis_t)
@@ -508,6 +493,9 @@ class DataPlot:
         ######## DATA2 ##############
         self.axis_data2.append(data2)
         # print(self.axis_data2)
+        # frame.plot_data(data.axis_data1,data.axis_t)
+
+    def act (self, tim, data1, data2):
         frame.value_data1.SetLabel(str(data1))
         frame.value_data2.SetLabel(str(data2))
         global flag_save
@@ -517,7 +505,7 @@ class DataPlot:
             # frame.text_msg.SetLabel('Data 1:    '+str(data1) +'      Data2:     '+str(data2))
             append_list_as_row(frame.path_dir,frame.data_rec, data.data_save)
        
-        # frame.plot_data(data.axis_data1,data.axis_t)
+       
          
     # Wait for get two data form serial before save
     def save (self,a,i):
@@ -527,6 +515,52 @@ class DataPlot:
             # print(self.data)
             self.save_all(self.data[0],self.data[1])
             self.count=0
+            global event
+            event.set()
+
+class RealtimePlot:
+    def __init__(self, a,canvas, fig):
+        self.y_min = 0
+        self.y_max = 100
+# -------------------- PLOT SETTINGS -----------------------------------------------------
+        self.a = a
+        self.canvas = canvas
+        self.fig = fig
+        t3= Thread(target = self.loop)
+        t3.start()    
+    # Plotting Real timeF
+    def loop (self):
+        while True:
+            global stop_threads_1 
+            if stop_threads_1:
+                break
+            # print(data.axis_data1)
+            # print(data.axis_data2)
+            # manim.FuncAnimation(self.fig,self.anim, interval=500)
+            self.anim()
+            time.sleep(0.5)
+    
+    def anim (self):
+        self.a.clear()
+        self.a.set_xticklabels(data.axis_t, fontsize=8)
+        self.a.set_ylim([self.y_min , self.y_max ])
+        # print(np.arange(self.y_min,self.y_max+5,5))
+        y=np.arange(self.y_min, self.y_max+5,10)
+        self.a.set_yticks(y) 
+        # self.a.set_yticklabels(y, fontsize=8)
+        self.a.autoscale_view(True)
+        self.a.relim()
+        self.a.plot(list(range(len(data.axis_data1))),data.axis_data1,'ro-', label="Data1",markersize=1, linewidth=1)
+        self.a.plot(list(range(len(data.axis_data2))),data.axis_data2,'bo-', label="Data2",markersize=1,linewidth=1)            # self.a.plot(list(range(len(data.axis_data1))),data.axis_data1,'ro-', label="Data1",markersize=1, linewidth=1)
+
+        # self.lineplot.set_data(list(range(len(data.axis_data1))),data.axis_data1)
+        # self.lineplot1.set_data(list(range(len(data.axis_data2))),data.axis_data2)
+
+        self.a.legend(loc=1) 
+        self.a.minorticks_on()
+        self.a.grid(which='major', linestyle='-', linewidth='0.5', color='black') 
+        self.a.grid(which='minor', linestyle=':', linewidth='0.5', color='black') 
+        self.fig.canvas.draw()
 
 
 
