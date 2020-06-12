@@ -95,19 +95,15 @@ class Serial_com:
         i = 0
         while True:
             global flag_data, event
-            if stop_threads_1:
+            if stop_threads:
                 break
             if event.is_set():
-                # i=i+1
-                # if i > 1:
-                    # look.acquire()
-                    print(data.tim)
-                    print("%d   %d",data.axis_data1[-1], data.axis_data2[-1])
-                    data.act(data.tim, data.axis_data1[-1], data.axis_data2[-1])
-                    event.clear()
-                    i = 0
-                    # look.release()
-                    # flag_data= False
+                # print(data.tim)
+                # print("%d   %d",data.axis_data1[-1], data.axis_data2[-1])
+                data.act(data.tim, data.axis_data1[-1], data.axis_data2[-1])
+                event.clear()
+                # look.release()
+                # flag_data= False
 
 # Lists serial port names
 # A list of the serial ports available on the system
@@ -202,13 +198,13 @@ class Screen(wx.Frame):
         self.a = self.fig.add_subplot(111)
         # self.lineplot, = self.a.plot([],'ro-', label="Data1",markersize=1, linewidth=1)
 
-        self.lineplot, = self.a.plot([],[],"bo-",label="Data1",markersize=0.5)
-        self.lineplot1, = self.a.plot([],[],"ro-",label="Data1",markersize=0.5)
+        # self.lineplot, = self.a.plot([],[],"bo-",label="Data1",markersize=0.5)
+        # self.lineplot1, = self.a.plot([],[],"ro-",label="Data1",markersize=0.5)
 
-        self.a.legend(loc=1) 
-        self.a.minorticks_on()
-        self.a.grid(which='major', linestyle='-', linewidth='0.5', color='black') 
-        self.a.grid(which='minor', linestyle=':', linewidth='0.5', color='black') 
+        # self.a.legend(loc=1) 
+        # self.a.minorticks_on()
+        # self.a.grid(which='major', linestyle='-', linewidth='0.5', color='black') 
+        # self.a.grid(which='minor', linestyle=':', linewidth='0.5', color='black') 
 
 
         # Function for realtime plot
@@ -444,12 +440,12 @@ class Screen(wx.Frame):
         else:
             self.connect_button.SetLabel('Connect')
             stop_threads = True
-            stop_threads_1 = True
+            # stop_threads_1 = True
             # wx.MessageBox(message=" Connection Ended", caption= "Disconnect")
             self.ser_msg.SetLabel("Close")            
             # self.Serial.endApplication()
             self.port.Enable()
-            self.baud.Disable()
+            self.baud.Enable()
     
     # Reset Plot Limits  
     def Set_Limit(self,event):
@@ -457,8 +453,8 @@ class Screen(wx.Frame):
         self.y_min= int(self.Limit_min.GetValue())
         self._plot.y_max = self.y_max
         self._plot.y_min = self.y_min
-        print(self.y_max)
-        print(self.y_min)
+        # print(self.y_max)
+        # print(self.y_min)
 
     # Stop all threads 
     def OnClose(self, event):
@@ -526,41 +522,44 @@ class RealtimePlot:
         self.a = a
         self.canvas = canvas
         self.fig = fig
-        t3= Thread(target = self.loop)
-        t3.start()    
-    # Plotting Real timeF
-    def loop (self):
-        while True:
-            global stop_threads_1 
-            if stop_threads_1:
-                break
-            # print(data.axis_data1)
-            # print(data.axis_data2)
-            # manim.FuncAnimation(self.fig,self.anim, interval=500)
-            self.anim()
-            time.sleep(0.5)
-    
-    def anim (self):
-        self.a.clear()
-        self.a.set_xticklabels(data.axis_t, fontsize=8)
-        self.a.set_ylim([self.y_min , self.y_max ])
-        # print(np.arange(self.y_min,self.y_max+5,5))
-        y=np.arange(self.y_min, self.y_max+5,10)
-        self.a.set_yticks(y) 
-        # self.a.set_yticklabels(y, fontsize=8)
-        self.a.autoscale_view(True)
-        self.a.relim()
-        self.a.plot(list(range(len(data.axis_data1))),data.axis_data1,'ro-', label="Data1",markersize=1, linewidth=1)
-        self.a.plot(list(range(len(data.axis_data2))),data.axis_data2,'bo-', label="Data2",markersize=1,linewidth=1)            # self.a.plot(list(range(len(data.axis_data1))),data.axis_data1,'ro-', label="Data1",markersize=1, linewidth=1)
-
-        # self.lineplot.set_data(list(range(len(data.axis_data1))),data.axis_data1)
-        # self.lineplot1.set_data(list(range(len(data.axis_data2))),data.axis_data2)
-
+        self.lineplot, = self.a.plot([],[],'ro-', label="Data1",markersize=1, linewidth=1)
+        self.lineplot1, = self.a.plot( [],[],'bo-', label="Data2",markersize=1,linewidth=1)
         self.a.legend(loc=1) 
         self.a.minorticks_on()
         self.a.grid(which='major', linestyle='-', linewidth='0.5', color='black') 
         self.a.grid(which='minor', linestyle=':', linewidth='0.5', color='black') 
         self.fig.canvas.draw()
+
+        t3= Thread(target = self.loop)
+        t3.start()    
+    # Plotting Real timeF
+    def loop (self):
+        while True:
+            global stop_threads_1, event
+            if stop_threads_1:
+                break
+            # print(data.axis_data1)
+            # print(data.axis_data2)
+            self.anim()
+            time.sleep(0.5)
+    
+    def anim (self):
+        # self.a.clear()
+        self.a.set_xticklabels(data.axis_t, fontsize=8)
+        self.a.set_ylim([self.y_min , self.y_max ])
+        # print(self.y_min,self.y_max)
+        y=np.arange(self.y_min, self.y_max+5,10)
+        self.a.set_yticks(y) 
+        self.a.set_yticklabels(y, fontsize=8)
+        self.a.autoscale_view(True)
+        self.a.relim()
+        # self.a.plot(list(range(len(data.axis_data1))),data.axis_data1,'ro-', label="Data1",markersize=1, linewidth=1)
+        # self.a.plot(list(range(len(data.axis_data2))),data.axis_data2,'bo-', label="Data2",markersize=1,linewidth=1)            # self.a.plot(list(range(len(data.axis_data1))),data.axis_data1,'ro-', label="Data1",markersize=1, linewidth=1)
+
+        self.lineplot.set_data(np.arange(0,len(data.axis_data1),1),np.array(data.axis_data1))
+        self.lineplot1.set_data(np.arange(0,len(data.axis_data2),1),np.array(data.axis_data2))
+
+        self.fig.canvas.draw_idle()
 
 
 
