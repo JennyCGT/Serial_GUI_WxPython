@@ -100,7 +100,17 @@ class Serial_com:
             if event.is_set():
                 # print(data.tim)
                 # print("%d   %d",data.axis_data1[-1], data.axis_data2[-1])
-                data.act(data.tim, data.axis_data1[-1], data.axis_data2[-1])
+                frame.value_data1.SetLabel(str(data.axis_data1[-1]))
+                frame.value_data2.SetLabel(str(data.axis_data2[-1]))
+                # frame.Refresh()
+                global flag_save
+                if(flag_save):
+                    # print('guardar')
+                    data_save=[data.tim ,str(frame.baud_selec),str(data.axis_data1[-1]),str(data.axis_data2[-1])]
+                    print(data_save)
+                    # frame.text_msg.SetLabel('Data 1:    '+str(data1) +'      Data2:     '+str(data2))
+                    append_list_as_row(frame.path_dir,frame.data_rec, data_save)
+
                 event.clear()
                 # look.release()
                 # flag_data= False
@@ -133,8 +143,8 @@ def serial_ports():
 # Function for save data in CSV file
 def append_list_as_row(path,file_name, list_of_elem):
     # Open file in append mode
-    f=path+"\\"+file_name+'.csv'
-    with open(f, 'a+', newline='') as write_obj:
+    f='csv/'+"\\"+file_name+'.csv'
+    with open(f, 'a', newline='') as write_obj:    
         # Create a writer object from csv module
         csv_writer = writer(write_obj)
         # Add contents of list as last row in the csv file
@@ -146,7 +156,8 @@ def append_list_as_row(path,file_name, list_of_elem):
 class Screen(wx.Frame):
     def __init__(self, parent, title):
         super(Screen, self).__init__(parent, title=title)
-        self.Bind(wx.EVT_CLOSE, self.OnClose)
+        # wx.Frame.__init__(self, None, -1, name='Name')
+        # self.Bind(wx.EVT_CLOSE, self.OnClose)
         self.port_selec=''
         self.baud_selec='115200'
         self.choices=[]
@@ -154,6 +165,7 @@ class Screen(wx.Frame):
         self.y_min = 0
         self.path_dir = 'C:'
         self.data_rec=''
+        # panel = self
         panel = wx.Panel(self, size=(1000,600))
         # panel.SetBackgroundColour('#364958')
         # panel.SetBackgroundColour('#5B5F97')
@@ -228,14 +240,14 @@ class Screen(wx.Frame):
         self.text_port.SetBackgroundColour('#F1F7EE')
         self.box_rec.Add(self.text_port, flag=wx.LEFT|wx.TOP, border=15)
 
-        self.path = wx.TextCtrl(panel,value=os.path.abspath(os.getcwd())+'\csv',size=wx.Size(200,15))
-        self.box_rec.Add(self.path, flag=wx.LEFT|wx.TOP|wx.EXPAND,border=15)
+        # self.path = wx.TextCtrl(panel,value=os.path.abspath(os.getcwd())+'\csv',size=wx.Size(200,15))
+        # self.box_rec.Add(self.path, flag=wx.LEFT|wx.TOP|wx.EXPAND,border=15)
 
         # self.browser_button= wx.Button(panel,label="Browser")
         # self.browser_button.Bind(wx.EVT_BUTTON, self.onDir)
         # self.box_rec.Add(self.browser_button, flag=wx.LEFT|wx.TOP, border=15)
         # BUTTON  REC
-        self.rec_button= wx.Button(panel,label="REC")
+        self.rec_button= wx.Button(panel,label="REC",)
         self.rec_button.Bind(wx.EVT_BUTTON, self.onRec)
         self.box_rec.Add(self.rec_button, flag=wx.LEFT|wx.TOP, border=15)
         sizer.Add(self.box_rec, pos=(0, 4), span=(1, 4),flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT , border=10)
@@ -356,12 +368,12 @@ class Screen(wx.Frame):
         # print(self.rec_button.Label)
         if self.rec_button.Label=='REC':
             print('rec')
-            self.path_dir= str(self.path.GetValue())
-            print(self.path_dir)
+            # self.path_dir= os.path.abspath(os.getc wd())
             self.data_rec = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
             self.text_msg.SetLabel('Exporting file ...'+ self.data_rec+'.csv')
             # f=self.path_dir+"\\"+self.data_rec+'.csv'
             f='csv/'+self.data_rec+'.csv'
+            print(self.path_dir)
 
             # Create CSV file
             with open(f, 'w') as write_obj:
@@ -490,18 +502,6 @@ class DataPlot:
         self.axis_data2.append(data2)
         # print(self.axis_data2)
         # frame.plot_data(data.axis_data1,data.axis_t)
-
-    def act (self, tim, data1, data2):
-        frame.value_data1.SetLabel(str(data1))
-        frame.value_data2.SetLabel(str(data2))
-        global flag_save
-        if(flag_save):
-            # print('guardar')
-            self.data_save=[tim ,str(frame.baud_selec),str(data1),str(data2)]
-            # frame.text_msg.SetLabel('Data 1:    '+str(data1) +'      Data2:     '+str(data2))
-            append_list_as_row(frame.path_dir,frame.data_rec, data.data_save)
-       
-       
          
     # Wait for get two data form serial before save
     def save (self,a,i):
