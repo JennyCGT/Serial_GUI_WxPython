@@ -470,6 +470,9 @@ class Screen(wx.Frame):
 
     # Stop all threads 
     def OnClose(self, event):
+        self.Serial.t1._stop()
+        self.Serial.t2._stop()
+        self._plot.t3._stop()
         global stop_threads, stop_threads_1
         # self.animator.event_source.stop()
         stop_threads =True
@@ -530,8 +533,8 @@ class RealtimePlot:
         self.a.grid(which='minor', linestyle=':', linewidth='0.5', color='black') 
         self.fig.canvas.draw()
 
-        t3= Thread(target = self.loop)
-        t3.start()    
+        self.t3= Thread(target = self.loop)
+        self.t3.start()    
     # Plotting Real timeF
     def loop (self):
         while True:
@@ -544,22 +547,26 @@ class RealtimePlot:
             time.sleep(0.5)
     
     def anim (self):
-        # self.a.clear()
+        self.a.clear()
         self.a.set_xticklabels(data.axis_t, fontsize=8)
         self.a.set_ylim([self.y_min , self.y_max ])
         # print(self.y_min,self.y_max)
         y=np.arange(self.y_min, self.y_max+5,10)
         self.a.set_yticks(y) 
-        self.a.set_yticklabels(y, fontsize=8)
+        # self.a.set_yticklabels(y, fontsize=8)
         self.a.autoscale_view(True)
         self.a.relim()
-        # self.a.plot(list(range(len(data.axis_data1))),data.axis_data1,'ro-', label="Data1",markersize=1, linewidth=1)
-        # self.a.plot(list(range(len(data.axis_data2))),data.axis_data2,'bo-', label="Data2",markersize=1,linewidth=1)            # self.a.plot(list(range(len(data.axis_data1))),data.axis_data1,'ro-', label="Data1",markersize=1, linewidth=1)
+        self.a.plot(list(range(len(data.axis_data1))),data.axis_data1,'ro-', label="Data1",markersize=1, linewidth=1)
+        self.a.plot(list(range(len(data.axis_data2))),data.axis_data2,'bo-', label="Data2",markersize=1,linewidth=1)            # self.a.plot(list(range(len(data.axis_data1))),data.axis_data1,'ro-', label="Data1",markersize=1, linewidth=1)
+        # self.lineplot.set_data(np.arange(0,len(data.axis_data1),1),np.array(data.axis_data1))
+        # self.lineplot1.set_data(np.arange(0,len(data.axis_data2),1),np.array(data.axis_data2))
 
-        self.lineplot.set_data(np.arange(0,len(data.axis_data1),1),np.array(data.axis_data1))
-        self.lineplot1.set_data(np.arange(0,len(data.axis_data2),1),np.array(data.axis_data2))
-
-        self.fig.canvas.draw_idle()
+        self.a.legend(loc=1) 
+        self.a.minorticks_on()
+        self.a.grid(which='major', linestyle='-', linewidth='0.5', color='black') 
+        self.a.grid(which='minor', linestyle=':', linewidth='0.5', color='black') 
+        self.fig.canvas.draw()
+        # self.fig.canvas.draw_idle()
 
 
 
