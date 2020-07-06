@@ -547,7 +547,7 @@ class RealtimePlot:
             time.sleep(0.5)
     
     def anim (self):
-        self.a.clear()
+        # self.a.clear()
         self.a.set_xticklabels(data.axis_t, fontsize=8)
         self.a.set_ylim([self.y_min , self.y_max ])
         # print(self.y_min,self.y_max)
@@ -556,15 +556,16 @@ class RealtimePlot:
         # self.a.set_yticklabels(y, fontsize=8)
         self.a.autoscale_view(True)
         self.a.relim()
-        self.a.plot(list(range(len(data.axis_data1))),data.axis_data1,'ro-', label="Data1",markersize=1, linewidth=1)
-        self.a.plot(list(range(len(data.axis_data2))),data.axis_data2,'bo-', label="Data2",markersize=1,linewidth=1)            # self.a.plot(list(range(len(data.axis_data1))),data.axis_data1,'ro-', label="Data1",markersize=1, linewidth=1)
-        # self.lineplot.set_data(np.arange(0,len(data.axis_data1),1),np.array(data.axis_data1))
-        # self.lineplot1.set_data(np.arange(0,len(data.axis_data2),1),np.array(data.axis_data2))
+        # self.a.plot(list(range(len(data.axis_data1))),data.axis_data1,'ro-', label="Data1",markersize=1, linewidth=1)
+        # self.a.plot(list(range(len(data.axis_data2))),data.axis_data2,'bo-', label="Data2",markersize=1,linewidth=1)            # self.a.plot(list(range(len(data.axis_data1))),data.axis_data1,'ro-', label="Data1",markersize=1, linewidth=1)
+        self.lineplot.set_data(np.arange(0,len(data.axis_data1),1),np.array(data.axis_data1))
+        self.lineplot1.set_data(np.arange(0,len(data.axis_data2),1),np.array(data.axis_data2))
 
-        self.a.legend(loc=1) 
-        self.a.minorticks_on()
-        self.a.grid(which='major', linestyle='-', linewidth='0.5', color='black') 
-        self.a.grid(which='minor', linestyle=':', linewidth='0.5', color='black') 
+        # self.a.legend(loc=1) 
+        # self.a.minorticks_on()
+        # self.a.grid(which='major', linestyle='-', linewidth='0.5', color='black') 
+        # self.a.grid(which='minor', linestyle=':', linewidth='0.5', color='black') 
+        
         self.fig.canvas.draw()
         # self.fig.canvas.draw_idle()
 
